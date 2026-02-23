@@ -494,12 +494,12 @@
 
     <script>
         let countdownInterval = null;
-        let refreshInterval = null;
         let countdownValue = 5;
         let fetchIntervalSec = 5;
         let prevCandidateVotes = {};
         let prevTotalVotes = null;
         let refreshCount = 0;
+        let isFetching = false;
 
         const COLORS = [
             '#f97316','#fbbf24','#fb923c','#f59e0b','#ef4444',
@@ -529,6 +529,8 @@
         }
 
         async function fetchCurrent() {
+            if (isFetching) return;
+            isFetching = true;
             try {
                 const res = await fetch('/api/current');
                 const data = await res.json();
@@ -536,6 +538,7 @@
                 renderData(data);
                 refreshCount++;
             } catch (err) { console.error('Fetch error:', err); }
+            isFetching = false;
         }
 
         function renderData(data) {
@@ -684,8 +687,13 @@
         }
 
         async function manualRefresh() {
-            await fetch('/api/refresh', { method: 'POST' });
-            setTimeout(() => fetchCurrent(), 2000);
+            countdownValue = fetchIntervalSec;
+            document.getElementById('countdownTimer').textContent = countdownValue;
+            try { await fetch('/api/refresh', { method: 'POST' }); } catch(e) {}
+            setTimeout(() => {
+                fetchCurrent();
+                countdownValue = fetchIntervalSec;
+            }, 2000);
         }
 
         // ── Poll deadline: Feb 26, 2026 23:59:59 KST (UTC+9) ──
@@ -733,18 +741,16 @@
             // Update deadline every second
             setInterval(updateDeadline, 1000);
 
-            // Refresh countdown
+            // Single unified countdown + refresh timer
             countdownInterval = setInterval(() => {
                 countdownValue--;
-                if (countdownValue < 0) countdownValue = fetchIntervalSec;
-                document.getElementById('countdownTimer').textContent = countdownValue;
+                document.getElementById('countdownTimer').textContent = Math.max(countdownValue, 0);
+                if (countdownValue <= 0 && !isFetching) {
+                    countdownValue = fetchIntervalSec;
+                    document.getElementById('countdownTimer').textContent = countdownValue;
+                    fetchCurrent();
+                }
             }, 1000);
-
-            // Auto-refresh
-            refreshInterval = setInterval(() => {
-                fetchCurrent();
-                countdownValue = fetchIntervalSec;
-            }, fetchIntervalSec * 1000);
         }
 
         document.addEventListener('DOMContentLoaded', startApp);

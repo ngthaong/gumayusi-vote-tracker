@@ -8,3 +8,4 @@ google_creds.json
 .DS_Store
 venv/
 
+.vercel
