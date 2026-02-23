@@ -30,6 +30,7 @@ BSTAGE_PASSWORD = os.getenv("BSTAGE_PASSWORD", "Guma123.")
 FETCH_INTERVAL = int(os.getenv("FETCH_INTERVAL", "3"))  # seconds
 SPACE_ID = "flnk-official"
 VN_TZ = timezone(timedelta(hours=7))  # Vietnam timezone UTC+7
+IS_VERCEL = os.getenv("VERCEL", "") != ""  # True when running on Vercel (serverless)
 
 # ── In-memory state ──────────────────────────────────────────────────────────
 # Each snapshot: { "timestamp": ISO, "candidates": [...], "total": int }
@@ -277,8 +278,9 @@ def fetch_poll_data():
 
         print(f"[{now()}] ✓ {total:,} total votes across {len(candidates)} candidates")
 
-        # Write results to xlsx and Google Sheet
-        write_result_file()
+        # Write results to xlsx and Google Sheet (skip xlsx on Vercel — no filesystem)
+        if not IS_VERCEL:
+            write_result_file()
         write_google_sheet()
     else:
         with lock:
@@ -606,10 +608,25 @@ def write_google_sheet():
             doran_diff = doran - prev_map.get("T1 Doran", doran)
             guma_diff = guma - prev_map.get("Hanwha Life Esports Gumayusi", guma)
 
-        # Queue the row (non-blocking)
         row = [timestamp, doran, doran_diff, guma, guma_diff, gap]
-        with _gsheet_lock:
-            _gsheet_queue.append(row)
+
+        if IS_VERCEL:
+            # On Vercel: write directly (no background thread)
+            if not _gsheet_initialized:
+                if not _init_gsheet():
+                    return
+            try:
+                _gsheet.append_row(row, value_input_option="RAW")
+                _gsheet_row_counter += 1
+                sheet_id = _gsheet._properties.get("sheetId", 0)
+                body = _gsheet_batch_format(sheet_id, _gsheet_row_counter)
+                _gsheet_spreadsheet.batch_update(body)
+            except Exception as ex:
+                print(f"[{now()}] Vercel GSheet write error: {ex}")
+        else:
+            # Queue the row (non-blocking) for background thread
+            with _gsheet_lock:
+                _gsheet_queue.append(row)
 
     except Exception as e:
         print(f"[{now()}] Google Sheet queue error: {e}")
@@ -643,6 +660,23 @@ def index():
 @app.route("/api/current")
 def api_current():
     """Current poll data with vote velocity."""
+    # On Vercel (serverless): fetch data on-demand if not fresh
+    if IS_VERCEL:
+        with lock:
+            last = current_data.get("last_updated")
+        need_fetch = True
+        if last:
+            try:
+                age = (datetime.now(VN_TZ) - datetime.fromisoformat(last)).total_seconds()
+                need_fetch = age > 5  # only re-fetch if data is older than 5s
+            except Exception:
+                pass
+        if need_fetch:
+            try:
+                fetch_poll_data()
+            except Exception as e:
+                print(f"[{now()}] On-demand fetch error: {e}")
+
     with lock:
         data = dict(current_data)
 
@@ -730,8 +764,11 @@ def start_background_threads():
     gs_writer.start()
 
 
-# Auto-start threads when module is loaded (for gunicorn)
-start_background_threads()
+# Auto-start threads when module is loaded (for gunicorn) — skip on Vercel (serverless)
+if not IS_VERCEL:
+    start_background_threads()
+else:
+    print("Running on Vercel (serverless mode) — no background threads")
 
 
 if __name__ == "__main__":
