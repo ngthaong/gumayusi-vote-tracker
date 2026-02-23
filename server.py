@@ -27,7 +27,7 @@ CORS(app)
 POLL_ID = os.getenv("POLL_ID", "698ecd18c1bbe47a262c4f4b")
 BSTAGE_EMAIL = os.getenv("BSTAGE_EMAIL", "ngthaongjenny@gmail.com")
 BSTAGE_PASSWORD = os.getenv("BSTAGE_PASSWORD", "Guma123.")
-FETCH_INTERVAL = int(os.getenv("FETCH_INTERVAL", "3"))  # seconds
+FETCH_INTERVAL = int(os.getenv("FETCH_INTERVAL", "5" if os.getenv("VERCEL", "") else "3"))  # 5s on Vercel (includes API latency), 3s locally
 SPACE_ID = "flnk-official"
 VN_TZ = timezone(timedelta(hours=7))  # Vietnam timezone UTC+7
 IS_VERCEL = os.getenv("VERCEL", "") != ""  # True when running on Vercel (serverless)
