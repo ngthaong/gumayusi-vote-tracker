@@ -1,0 +1,33 @@
+# ── BStage Plus Vote Tracker Configuration ──────────────────────────
+# Copy this file to .env and fill in your credentials:
+#   cp env_example.txt .env
+#
+# Poll ID (extracted from the URL)
+POLL_ID=698ecd18c1bbe47a262c4f4b
+
+# ── Authentication (you need at least one of these) ──────────────────
+#
+# HOW TO GET YOUR TOKEN/COOKIE:
+#
+# 1. Open https://bstageplus.com/poll/698ecd18c1bbe47a262c4f4b in Chrome/Edge
+# 2. Log in to your account
+# 3. Open Developer Tools (F12 or Cmd+Option+I on Mac)
+# 4. Go to the "Network" tab
+# 5. Refresh the page
+# 6. Look for API requests (filter by "XHR" or "Fetch")
+# 7. Click on any request to the bstageplus API
+# 8. In the "Headers" tab, find either:
+#    - "Authorization: Bearer <token>" → copy the token part
+#    - "Cookie: <full cookie string>" → copy the entire value
+#
+# Paste the value below (without quotes):
+
+# Bearer token from the Authorization header
+BSTAGE_TOKEN=
+
+# OR full cookie string from the Cookie header
+BSTAGE_COOKIE=
+
+# ── Fetch interval (in seconds) ─────────────────────────────────────
+FETCH_INTERVAL=60
+

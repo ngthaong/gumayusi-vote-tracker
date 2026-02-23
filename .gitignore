@@ -1,0 +1,10 @@
+.env
+*.xlsx
+result.txt
+__pycache__/
+*.pyc
+braided-box-488323-g1-46311e11eceb.json
+google_creds.json
+.DS_Store
+venv/
+

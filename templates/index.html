@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#fff5eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>GUMAWIN! 🧡 Vote Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #fff5eb;
+            --bg-secondary: #ffe8d6;
+            --bg-card: #ffffff;
+            --bg-card-hover: #fffaf5;
+            --text-primary: #2d1810;
+            --text-secondary: #7c3a12;
+            --text-muted: #b07a50;
+            --accent: #f97316;
+            --accent-light: #fb923c;
+            --accent-dark: #ea580c;
+            --accent-glow: rgba(249, 115, 22, 0.15);
+            --green: #059669;
+            --green-bg: rgba(5, 150, 105, 0.1);
+            --red: #dc2626;
+            --red-bg: rgba(220, 38, 38, 0.08);
+            --orange: #f97316;
+            --orange-bg: rgba(249, 115, 22, 0.08);
+            --border: rgba(0, 0, 0, 0.06);
+            --border-accent: rgba(249, 115, 22, 0.2);
+            --shadow: 0 2px 16px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08);
+            --radius: 18px;
+            --radius-sm: 12px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            min-height: 100dvh;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .bg-gradient {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background:
+                radial-gradient(ellipse at 10% -10%, rgba(251,191,36,0.15) 0%, transparent 45%),
+                radial-gradient(ellipse at 90% 20%, rgba(249,115,22,0.08) 0%, transparent 40%),
+                radial-gradient(ellipse at 40% 100%, rgba(251,146,60,0.1) 0%, transparent 50%);
+            pointer-events: none; z-index: 0;
+        }
+
+        .container {
+            max-width: 1200px; margin: 0 auto;
+            padding: 20px clamp(12px, 4vw, 24px);
+            position: relative; z-index: 1;
+        }
+
+        /* Header */
+        .header {
+            text-align: center; padding: clamp(24px, 5vw, 40px) clamp(16px, 4vw, 32px) clamp(20px, 3vw, 32px);
+            background: linear-gradient(135deg, #f97316, #fb923c, #fbbf24);
+            border-radius: var(--radius); margin-bottom: 24px;
+            box-shadow: 0 8px 32px rgba(249,115,22,0.2);
+            position: relative; overflow: hidden;
+        }
+        .header::before {
+            content: ''; position: absolute; top: -50%; right: -30%; width: 60%; height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .header-badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 16px; background: rgba(255,255,255,0.25);
+            border: 1px solid rgba(255,255,255,0.35); border-radius: 100px;
+            font-size: 12px; font-weight: 600; color: #fff;
+            text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px;
+            backdrop-filter: blur(8px);
+        }
+        .header-badge .dot {
+            width: 8px; height: 8px; background: #fff;
+            border-radius: 50%; animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+        .header h1 {
+            font-size: clamp(1.4rem, 5vw, 2.2rem); font-weight: 800;
+            color: #fff;
+            margin-bottom: 8px; line-height: 1.3;
+            padding: 0 8px; text-shadow: 0 2px 12px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .header .poll-title {
+            font-size: clamp(0.85rem, 2.5vw, 1rem); color: rgba(255,255,255,0.9); font-weight: 500;
+            max-width: 700px; margin: 0 auto; line-height: 1.5; padding: 0 8px;
+            position: relative;
+        }
+
+        /* Status */
+        .status-bar {
+            display: flex; justify-content: center; align-items: center;
+            gap: 12px 20px; padding: 12px 0; margin-bottom: 24px; flex-wrap: wrap;
+        }
+        .status-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
+        .status-item .value { color: var(--text-secondary); font-weight: 600; }
+        .countdown {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 12px; background: rgba(249,115,22,0.08);
+            border-radius: 100px; font-size: 12px; font-weight: 600;
+            color: var(--accent); font-variant-numeric: tabular-nums;
+        }
+
+        /* Error */
+        .error-banner {
+            background: #fff5f5; border: 1px solid rgba(220,38,38,0.15);
+            border-radius: var(--radius); padding: 16px 20px; margin-bottom: 24px;
+            display: flex; align-items: flex-start; gap: 12px;
+            word-break: break-word;
+        }
+        .error-banner .icon { font-size: 1.5rem; flex-shrink: 0; }
+        .error-banner .message { font-size: 0.85rem; color: var(--red); line-height: 1.6; }
+
+        /* Summary */
+        .summary-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 12px; margin-bottom: 28px;
+        }
+        .summary-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 22px 16px; text-align: center;
+            transition: all 0.3s ease; box-shadow: var(--shadow);
+        }
+        .summary-card:hover {
+            border-color: var(--border-accent);
+            transform: translateY(-3px); box-shadow: var(--shadow-lg);
+        }
+        .summary-card .label {
+            font-size: 11px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px;
+        }
+        .summary-card .value { font-size: clamp(1.2rem, 3vw, 1.8rem); font-weight: 800; color: var(--text-primary); }
+        .summary-card .change {
+            display: inline-flex; align-items: center; gap: 4px;
+            margin-top: 8px; padding: 4px 10px; border-radius: 100px;
+            font-size: 12px; font-weight: 600;
+        }
+        .change.positive { background: var(--green-bg); color: var(--green); }
+        .change.negative { background: var(--red-bg); color: var(--red); }
+        .change.neutral { background: rgba(0,0,0,0.03); color: var(--text-muted); }
+
+        /* Candidates */
+        .section-title {
+            font-size: clamp(1.1rem, 3vw, 1.3rem); font-weight: 700; margin-bottom: 16px;
+            display: flex; align-items: center; gap: 10px; color: var(--text-primary);
+        }
+        .candidates-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
+        .candidate-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px 20px;
+            display: grid; grid-template-columns: 40px 1fr auto auto auto;
+            align-items: center; gap: 16px; transition: all 0.3s ease;
+            position: relative; overflow: hidden; box-shadow: var(--shadow);
+        }
+        .candidate-card:hover {
+            border-color: var(--border-accent);
+            transform: translateX(4px); box-shadow: var(--shadow-lg);
+        }
+        .candidate-card .rank {
+            width: 40px; height: 40px; display: flex; align-items: center;
+            justify-content: center; border-radius: 12px; font-weight: 800; font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        .rank-1 { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #000; }
+        .rank-2 { background: linear-gradient(135deg, #d1d5db, #9ca3af); color: #000; }
+        .rank-3 { background: linear-gradient(135deg, #d97706, #b45309); color: #fff; }
+        .rank-default { background: var(--bg-secondary); color: var(--text-muted); border: 1px solid var(--border); }
+        .candidate-info { display: flex; align-items: center; gap: 12px; min-width: 0; overflow: hidden; }
+        .candidate-avatar {
+            width: 44px; height: 44px; border-radius: 12px;
+            object-fit: cover; background: var(--bg-secondary); flex-shrink: 0;
+        }
+        .candidate-name {
+            font-weight: 700; font-size: clamp(0.9rem, 2.5vw, 1.05rem);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary);
+        }
+        .candidate-percentage { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+        .candidate-votes { text-align: right; flex-shrink: 0; }
+        .candidate-votes .count { font-size: clamp(1.1rem, 3vw, 1.5rem); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-primary); }
+        .candidate-votes .unit { font-size: 0.75rem; color: var(--text-muted); margin-left: 4px; }
+        .candidate-gap { text-align: right; min-width: 100px; flex-shrink: 0; }
+        .candidate-gap .gap-value {
+            font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums;
+            color: var(--red);
+        }
+        .candidate-gap .gap-value.is-first { color: var(--green); }
+        .candidate-gap .gap-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
+        .candidate-velocity { text-align: right; min-width: 100px; flex-shrink: 0; }
+        .candidate-velocity .speed { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .candidate-velocity .vlabel { font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
+        .velocity-positive { color: var(--green); }
+        .velocity-negative { color: var(--red); }
+        .velocity-zero { color: var(--text-muted); }
+        .candidate-progress {
+            position: absolute; bottom: 0; left: 0; height: 3px;
+            background: linear-gradient(90deg, #f97316, #fbbf24);
+            border-radius: 0 3px 0 0; transition: width 1s ease;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            gap: 8px; padding: 10px 20px; border: none; border-radius: var(--radius-sm);
+            font-family: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+            transition: all 0.2s; -webkit-tap-highlight-color: transparent;
+        }
+        .btn-secondary {
+            background: #fff; color: var(--accent);
+            border: 1px solid var(--border-accent);
+            box-shadow: var(--shadow);
+        }
+        .btn-secondary:hover { background: var(--bg-card-hover); border-color: var(--accent); box-shadow: var(--shadow-lg); }
+        .btn-secondary:active { transform: scale(0.96); }
+
+        /* Footer */
+        .footer { text-align: center; padding: 20px 12px; color: var(--text-muted); font-size: 0.8rem; }
+        .footer a { color: var(--accent); text-decoration: none; font-weight: 600; }
+        .footer a:hover { text-decoration: underline; }
+
+        /* Loading */
+        .loading { text-align: center; padding: 60px 20px; }
+        .loading .spinner {
+            width: 48px; height: 48px; border: 3px solid var(--border);
+            border-top-color: var(--accent); border-radius: 50%;
+            animation: spin 1s linear infinite; margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading p { color: var(--text-muted); }
+
+        /* Mobile extras */
+        .mobile-velocity { display: none; font-size: 0.8rem; margin-top: 4px; }
+        .mobile-gap { display: none; font-size: 0.8rem; margin-top: 2px; color: var(--red); }
+        .mobile-gap.is-first { color: var(--green); }
+        .mobile-diff { display: none; font-size: 0.8rem; margin-top: 2px; }
+
+        /* Vote diff badge */
+        .vote-diff-badge {
+            display: inline-flex; align-items: center; gap: 3px;
+            padding: 2px 8px; border-radius: 100px;
+            font-size: 0.78rem; font-weight: 700; font-variant-numeric: tabular-nums;
+            margin-left: 6px; vertical-align: middle;
+            transition: all 0.3s ease;
+        }
+        .vote-diff-badge.positive { background: var(--green-bg); color: var(--green); }
+        .vote-diff-badge.negative { background: var(--red-bg); color: var(--red); }
+        .vote-diff-badge.zero { background: rgba(0,0,0,0.03); color: var(--text-muted); }
+
+        /* Flash animation on refresh */
+        @keyframes flashGreen {
+            0% { box-shadow: 0 0 0 0 rgba(5,150,105,0.35); }
+            50% { box-shadow: 0 0 20px 4px rgba(5,150,105,0.12); }
+            100% { box-shadow: var(--shadow); }
+        }
+        @keyframes flashPurple {
+            0% { box-shadow: 0 0 0 0 rgba(249,115,22,0.2); }
+            50% { box-shadow: 0 0 14px 3px rgba(249,115,22,0.08); }
+            100% { box-shadow: var(--shadow); }
+        }
+        @keyframes slideIn {
+            0% { opacity: 0; transform: translateY(-6px) scale(0.8); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .candidate-card.flash-update { animation: flashGreen 0.8s ease-out; }
+        .candidate-card.flash-no-change { animation: flashPurple 0.6s ease-out; }
+        .vote-diff-badge.animate { animation: slideIn 0.4s ease-out; }
+        .summary-card.flash-update { animation: flashGreen 0.8s ease-out; }
+
+        /* Deadline countdown */
+        .deadline-banner {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 22px 24px;
+            text-align: center; margin-bottom: 24px;
+            box-shadow: var(--shadow);
+        }
+        .deadline-label {
+            font-size: 12px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 1.5px; color: var(--accent); margin-bottom: 12px;
+        }
+        .deadline-timer {
+            display: flex; justify-content: center; align-items: center;
+            gap: 6px; margin-bottom: 8px;
+        }
+        .deadline-unit { text-align: center; }
+        .deadline-num {
+            font-size: clamp(1.8rem, 5vw, 2.6rem); font-weight: 900;
+            font-variant-numeric: tabular-nums; line-height: 1;
+            background: linear-gradient(135deg, #ea580c, #f97316);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .deadline-txt {
+            display: block; font-size: 11px; font-weight: 600;
+            color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;
+            margin-top: 4px;
+        }
+        .deadline-sep {
+            font-size: clamp(1.4rem, 4vw, 2rem); font-weight: 700;
+            color: var(--bg-secondary); padding-bottom: 16px;
+        }
+        .deadline-date {
+            font-size: 13px; color: var(--text-muted); font-weight: 500;
+        }
+        .deadline-banner.expired {
+            background: #fff5f5;
+            border-color: rgba(220,38,38,0.15);
+        }
+        .deadline-banner.expired .deadline-label { color: var(--red); }
+        .deadline-banner.urgent .deadline-num {
+            background: linear-gradient(135deg, #fbbf24, #dc2626);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Refresh indicator */
+        .refresh-indicator {
+            position: fixed; top: 0; left: 0; width: 100%; height: 3px;
+            background: linear-gradient(90deg, var(--accent), var(--accent-light), var(--accent));
+            background-size: 200% 100%;
+            animation: shimmer 1s ease-in-out;
+            z-index: 9999; opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .refresh-indicator.active { opacity: 1; }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; opacity: 1; }
+            100% { background-position: -200% 0; opacity: 0; }
+        }
+
+        /* ── Tablet (≤ 1024px) ── */
+        @media (max-width: 1024px) {
+            .candidate-card {
+                grid-template-columns: 36px 1fr auto auto;
+                gap: 12px; padding: 14px 16px;
+            }
+            .candidate-velocity { display: none; }
+            .mobile-velocity { display: block !important; }
+            .candidate-avatar { width: 40px; height: 40px; }
+            .candidate-card .rank { width: 36px; height: 36px; font-size: 1rem; }
+        }
+
+        /* ── Mobile (≤ 768px) ── */
+        @media (max-width: 768px) {
+            .summary-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .candidate-card {
+                grid-template-columns: 32px 1fr auto;
+                gap: 10px; padding: 12px 14px;
+            }
+            .candidate-velocity { display: none; }
+            .candidate-gap { display: none; }
+            .mobile-velocity { display: block !important; }
+            .mobile-gap { display: block !important; }
+            .mobile-diff { display: block !important; }
+            .candidate-votes .count { font-size: 1.15rem; }
+            .candidate-votes .unit { display: none; }
+            .candidate-card .rank { width: 32px; height: 32px; font-size: 0.9rem; border-radius: 10px; }
+            .candidate-avatar { width: 36px; height: 36px; border-radius: 10px; }
+            .status-bar { gap: 8px 16px; }
+            .vote-diff-badge { font-size: 0.72rem; padding: 1px 6px; margin-left: 4px; }
+        }
+
+        /* ── Small phone (≤ 480px) ── */
+        @media (max-width: 480px) {
+            .container { padding: 10px 10px; }
+            .header { padding: 16px 0 12px; }
+            .summary-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+            .summary-card { padding: 14px 10px; }
+            .summary-card .value { font-size: 1.2rem; }
+            .summary-card .label { font-size: 10px; }
+            .summary-card .change { font-size: 11px; padding: 3px 8px; }
+            .candidate-card { padding: 10px 12px; gap: 8px; }
+            .candidate-name { font-size: 0.85rem; }
+            .candidate-info { gap: 8px; }
+            .candidate-avatar { width: 32px; height: 32px; border-radius: 8px; }
+            .candidate-card .rank { width: 28px; height: 28px; font-size: 0.8rem; border-radius: 8px; }
+            .candidate-votes .count { font-size: 1rem; }
+            .status-bar { gap: 6px 10px; font-size: 11px; }
+            .error-banner { padding: 12px 14px; }
+            .error-banner .message { font-size: 0.78rem; }
+        }
+
+        /* ── Very small phone (≤ 360px) ── */
+        @media (max-width: 360px) {
+            .container { padding: 8px; }
+            .summary-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+            .summary-card { padding: 12px 8px; }
+            .summary-card .value { font-size: 1.05rem; }
+            .candidate-card { gap: 6px; padding: 8px 10px; }
+            .candidate-avatar { display: none; }
+            .header-badge { font-size: 10px; padding: 4px 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="refresh-indicator" id="refreshIndicator"></div>
+    <div class="bg-gradient"></div>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-badge"><span class="dot"></span>Live · Guma Fans 🧡</div>
+            <h1 id="pollTitle">🧡 Gumayusi Vote Tracker</h1>
+            <p class="poll-title" id="pollSubtitle">GUMAWIN! HLEWIN!</p>
+        </div>
+
+        <!-- Poll Deadline Countdown -->
+        <div class="deadline-banner" id="deadlineBanner">
+            <div class="deadline-label">⏰ Voting ends in</div>
+            <div class="deadline-timer" id="deadlineTimer">
+                <div class="deadline-unit"><span class="deadline-num" id="dlDays">--</span><span class="deadline-txt">days</span></div>
+                <div class="deadline-sep">:</div>
+                <div class="deadline-unit"><span class="deadline-num" id="dlHours">--</span><span class="deadline-txt">hrs</span></div>
+                <div class="deadline-sep">:</div>
+                <div class="deadline-unit"><span class="deadline-num" id="dlMins">--</span><span class="deadline-txt">min</span></div>
+                <div class="deadline-sep">:</div>
+                <div class="deadline-unit"><span class="deadline-num" id="dlSecs">--</span><span class="deadline-txt">sec</span></div>
+            </div>
+            <div class="deadline-date">Feb 26, 2026 · 23:59 KST</div>
+        </div>
+
+        <!-- Status -->
+        <div class="status-bar">
+            <div class="status-item">
+                <span>🕐</span>
+                <span>Updated: <span class="value" id="lastUpdated">--</span></span>
+            </div>
+            <div class="status-item">
+                <span class="countdown">⏳ Next in <span id="countdownTimer">5</span>s</span>
+            </div>
+            <button class="btn btn-secondary" onclick="manualRefresh()" style="padding:6px 16px;font-size:12px;">↻ Refresh</button>
+        </div>
+
+        <!-- Error -->
+        <div class="error-banner" id="errorBanner" style="display:none;">
+            <span class="icon">⚠️</span>
+            <div class="message" id="errorMessage"></div>
+        </div>
+
+        <!-- Summary -->
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="label">Total Votes</div>
+                <div class="value" id="totalVotes">--</div>
+                <div class="change neutral" id="totalChange">Waiting...</div>
+            </div>
+            <div class="summary-card">
+                <div class="label">Candidates</div>
+                <div class="value" id="totalCandidates">--</div>
+                <div class="change neutral">In this poll</div>
+            </div>
+            <div class="summary-card">
+                <div class="label">Votes / Min</div>
+                <div class="value" id="totalVelocity">--</div>
+                <div class="change neutral" id="velocityLabel">All candidates</div>
+            </div>
+            <div class="summary-card">
+                <div class="label">🥇 Leading</div>
+                <div class="value" id="leadingCandidate" style="font-size:1.1rem;">--</div>
+                <div class="change neutral" id="leadingVotes">--</div>
+            </div>
+        </div>
+
+        <!-- Candidates -->
+        <div class="section-title"><span>👥</span> Candidates</div>
+        <div class="candidates-list" id="candidatesList">
+            <div class="loading"><div class="spinner"></div><p>Fetching vote data...</p></div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Made with 🧡 by Guma fans · Data from <a href="https://bstageplus.com/poll/698ecd18c1bbe47a262c4f4b" target="_blank">BStage Plus</a> · Auto-refreshes every <span id="intervalDisplay">5</span>s</p>
+        </div>
+    </div>
+
+    <script>
+        let countdownInterval = null;
+        let refreshInterval = null;
+        let countdownValue = 5;
+        let fetchIntervalSec = 5;
+        let prevCandidateVotes = {};
+        let prevTotalVotes = null;
+        let refreshCount = 0;
+
+        const COLORS = [
+            '#f97316','#fbbf24','#fb923c','#f59e0b','#ef4444',
+            '#ec4899','#fdba74','#e11d48','#10b981','#3b82f6',
+            '#06b6d4','#8b5cf6','#14b8a6','#84cc16','#d946ef',
+            '#22d3ee','#a3e635','#6366f1','#f472b6','#818cf8',
+        ];
+
+        function fmt(n) { return n == null || isNaN(n) ? '--' : n.toLocaleString(); }
+        function fmtV(v) { return v === 0 ? '0' : v > 0 ? `+${v.toLocaleString()}` : v.toLocaleString(); }
+        function velClass(v) { return v > 0 ? 'velocity-positive' : v < 0 ? 'velocity-negative' : 'velocity-zero'; }
+        function chgClass(v) { return v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral'; }
+
+        function showRefreshIndicator() {
+            const bar = document.getElementById('refreshIndicator');
+            bar.classList.remove('active');
+            void bar.offsetWidth;
+            bar.classList.add('active');
+            setTimeout(() => bar.classList.remove('active'), 1200);
+        }
+
+        function flashElement(el, hasChange) {
+            el.classList.remove('flash-update', 'flash-no-change');
+            void el.offsetWidth;
+            el.classList.add(hasChange ? 'flash-update' : 'flash-no-change');
+            setTimeout(() => el.classList.remove('flash-update', 'flash-no-change'), 1000);
+        }
+
+        async function fetchCurrent() {
+            try {
+                const res = await fetch('/api/current');
+                const data = await res.json();
+                showRefreshIndicator();
+                renderData(data);
+                refreshCount++;
+            } catch (err) { console.error('Fetch error:', err); }
+        }
+
+        function renderData(data) {
+            // Error
+            const eb = document.getElementById('errorBanner');
+            if (data.error) {
+                eb.style.display = 'flex';
+                document.getElementById('errorMessage').textContent = data.error;
+            } else { eb.style.display = 'none'; }
+
+            // Title
+            if (data.poll_title) {
+                document.getElementById('pollTitle').textContent = '🧡 ' + data.poll_title;
+            }
+
+            // Interval
+            if (data.fetch_interval) {
+                fetchIntervalSec = data.fetch_interval;
+                document.getElementById('intervalDisplay').textContent = fetchIntervalSec;
+            }
+
+            // Status
+            if (data.last_updated) {
+                document.getElementById('lastUpdated').textContent = new Date(data.last_updated).toLocaleTimeString();
+            }
+            // Compute local diffs
+            const localDiffs = {};
+            let localTotalDiff = null;
+            if (data.candidates && prevTotalVotes !== null) {
+                for (const c of data.candidates) {
+                    const prev = prevCandidateVotes[c.name];
+                    if (prev !== undefined) {
+                        localDiffs[c.name] = c.votes - prev;
+                    }
+                }
+                localTotalDiff = data.total_votes - prevTotalVotes;
+            }
+
+            // Update previous state
+            if (data.candidates) {
+                for (const c of data.candidates) {
+                    prevCandidateVotes[c.name] = c.votes;
+                }
+            }
+            prevTotalVotes = data.total_votes;
+
+            // Summary
+            document.getElementById('totalVotes').textContent = fmt(data.total_votes);
+            document.getElementById('totalCandidates').textContent = data.candidates ? data.candidates.length : '--';
+            document.getElementById('totalVelocity').textContent = fmtV(data.total_velocity || 0);
+
+            const tc = document.getElementById('totalChange');
+            const diff = data.total_diff || 0;
+            tc.className = `change ${chgClass(diff)}`;
+            if (localTotalDiff !== null && localTotalDiff !== 0) {
+                tc.innerHTML = `${fmtV(localTotalDiff)} this refresh`;
+            } else if (diff !== 0) {
+                tc.textContent = `${fmtV(diff)} since last check`;
+            } else {
+                tc.textContent = 'No change yet';
+            }
+
+            // Flash total card
+            if (localTotalDiff !== null && localTotalDiff > 0) {
+                const summaryCards = document.querySelectorAll('.summary-card');
+                if (summaryCards[0]) flashElement(summaryCards[0], true);
+            }
+
+            // Leader
+            if (data.candidates?.length) {
+                const sorted = [...data.candidates].sort((a, b) => b.votes - a.votes);
+                document.getElementById('leadingCandidate').textContent = sorted[0].name;
+                document.getElementById('leadingVotes').textContent = fmt(sorted[0].votes) + ' votes';
+                document.getElementById('leadingVotes').className = 'change positive';
+            }
+
+            renderCandidates(data.candidates || [], data.total_votes || 0, localDiffs);
+            countdownValue = fetchIntervalSec;
+        }
+
+        function renderCandidates(candidates, total, localDiffs) {
+            const el = document.getElementById('candidatesList');
+            if (!candidates?.length) {
+                el.innerHTML = '<div class="loading"><div class="spinner"></div><p>Waiting for vote data...</p></div>';
+                return;
+            }
+
+            const sorted = [...candidates].sort((a, b) => b.votes - a.votes);
+            el.innerHTML = sorted.map((c, i) => {
+                const rank = i + 1;
+                const rc = rank <= 3 ? `rank-${rank}` : 'rank-default';
+                const pct = total > 0 ? ((c.votes / total) * 100).toFixed(1) : '0.0';
+                const vel = c.velocity || 0;
+                const diff = c.diff || 0;
+                const vc = velClass(vel);
+                const avatar = c.image
+                    ? `<img class="candidate-avatar" src="${c.image}" alt="${c.name}" onerror="this.style.display='none'">`
+                    : `<div class="candidate-avatar" style="display:flex;align-items:center;justify-content:center;font-size:1.2rem;background:linear-gradient(135deg,${COLORS[i%COLORS.length]}33,${COLORS[i%COLORS.length]}11)">${c.name.charAt(0)}</div>`;
+
+                const gap = c.gap_from_first || 0;
+                const isFirst = gap === 0 && c.votes > 0;
+                const gapText = isFirst ? '🥇 1st Place' : `-${fmt(gap)}`;
+                const gapClass = isFirst ? 'is-first' : '';
+
+                // Local diff badge
+                const localDiff = localDiffs[c.name];
+                let diffBadge = '';
+                if (localDiff !== undefined && localDiff !== 0) {
+                    const dc = localDiff > 0 ? 'positive' : 'negative';
+                    diffBadge = `<span class="vote-diff-badge ${dc} animate">${localDiff > 0 ? '+' : ''}${fmt(localDiff)}</span>`;
+                } else if (localDiff === 0 && refreshCount > 1) {
+                    diffBadge = `<span class="vote-diff-badge zero">+0</span>`;
+                }
+
+                const hasIncrease = localDiff !== undefined && localDiff > 0;
+                const flashClass = hasIncrease ? 'flash-update' : (refreshCount > 1 ? 'flash-no-change' : '');
+
+                return `
+                <div class="candidate-card ${flashClass}">
+                    <div class="rank ${rc}">${rank}</div>
+                    <div class="candidate-info">
+                        ${avatar}
+                        <div style="min-width:0;">
+                            <div class="candidate-name">${c.name}</div>
+                            <div class="candidate-percentage">${pct}% of total</div>
+                            <div class="mobile-gap ${gapClass}">${gapText}</div>
+                            <div class="mobile-velocity ${vc}">${fmtV(vel)}/min</div>
+                            <div class="mobile-diff">${diffBadge || ''}</div>
+                        </div>
+                    </div>
+                    <div class="candidate-votes">
+                        <div class="count">${fmt(c.votes)}${diffBadge}</div>
+                        <span class="unit">votes</span>
+                    </div>
+                    <div class="candidate-gap">
+                        <div class="gap-value ${gapClass}">${gapText}</div>
+                        <div class="gap-label">gap from 1st</div>
+                    </div>
+                    <div class="candidate-velocity">
+                        <div class="speed ${vc}">${fmtV(vel)}/min</div>
+                        <div class="vlabel">${diff >= 0 ? '+' : ''}${fmt(diff)} last check</div>
+                    </div>
+                    <div class="candidate-progress" style="width:${pct}%"></div>
+                </div>`;
+            }).join('');
+        }
+
+        async function manualRefresh() {
+            await fetch('/api/refresh', { method: 'POST' });
+            setTimeout(() => fetchCurrent(), 2000);
+        }
+
+        // ── Poll deadline: Feb 26, 2026 23:59:59 KST (UTC+9) ──
+        // KST is UTC+9, so 23:59:59 KST = 14:59:59 UTC
+        const POLL_DEADLINE = new Date('2026-02-26T23:59:59+09:00');
+
+        function updateDeadline() {
+            const now = new Date();
+            const diff = POLL_DEADLINE - now;
+            const banner = document.getElementById('deadlineBanner');
+
+            if (diff <= 0) {
+                document.getElementById('dlDays').textContent = '0';
+                document.getElementById('dlHours').textContent = '00';
+                document.getElementById('dlMins').textContent = '00';
+                document.getElementById('dlSecs').textContent = '00';
+                banner.classList.add('expired');
+                banner.querySelector('.deadline-label').textContent = '🚫 Voting has ended';
+                return;
+            }
+
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+            document.getElementById('dlDays').textContent = days;
+            document.getElementById('dlHours').textContent = String(hours).padStart(2, '0');
+            document.getElementById('dlMins').textContent = String(mins).padStart(2, '0');
+            document.getElementById('dlSecs').textContent = String(secs).padStart(2, '0');
+
+            // Urgent styling when less than 24 hours remain
+            if (diff < 24 * 60 * 60 * 1000) {
+                banner.classList.add('urgent');
+            } else {
+                banner.classList.remove('urgent');
+            }
+        }
+
+        function startApp() {
+            fetchCurrent();
+            updateDeadline();
+            countdownValue = fetchIntervalSec;
+
+            // Update deadline every second
+            setInterval(updateDeadline, 1000);
+
+            // Refresh countdown
+            countdownInterval = setInterval(() => {
+                countdownValue--;
+                if (countdownValue < 0) countdownValue = fetchIntervalSec;
+                document.getElementById('countdownTimer').textContent = countdownValue;
+            }, 1000);
+
+            // Auto-refresh
+            refreshInterval = setInterval(() => {
+                fetchCurrent();
+                countdownValue = fetchIntervalSec;
+            }, fetchIntervalSec * 1000);
+        }
+
+        document.addEventListener('DOMContentLoaded', startApp);
+    </script>
+</body>
+</html>
