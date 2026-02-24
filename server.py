@@ -732,8 +732,21 @@ def _load_prev_day_from_gsheet():
         if len(row_data) < 4:
             return
 
-        doran = int(str(row_data[1]).replace(",", ""))
-        guma = int(str(row_data[3]).replace(",", ""))
+        def parse_int(val):
+            """Parse int from Google Sheet value (handles 2.596.698 or 2,596,698 or plain)."""
+            s = str(val).strip()
+            # Remove thousand separators (both . and ,)
+            # If the string has dots as thousand seps (e.g. 2.596.698), remove them
+            if s.count('.') > 1:
+                s = s.replace('.', '')
+            elif '.' in s and ',' in s:
+                s = s.replace(',', '')  # e.g. 2,596.698 (unlikely but handle it)
+            else:
+                s = s.replace(',', '').replace('.', '')
+            return int(s)
+
+        doran = parse_int(row_data[1])
+        guma = parse_int(row_data[3])
 
         if doran >= guma:
             _prev_day_data = {
