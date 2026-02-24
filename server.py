@@ -30,11 +30,25 @@ BSTAGE_PASSWORD = os.getenv("BSTAGE_PASSWORD", "Guma123.")
 FETCH_INTERVAL = int(os.getenv("FETCH_INTERVAL", "5" if os.getenv("VERCEL", "") else "3"))  # 5s on Vercel (includes API latency), 3s locally
 SPACE_ID = "flnk-official"
 VN_TZ = timezone(timedelta(hours=7))  # Vietnam timezone UTC+7
+KST_TZ = timezone(timedelta(hours=9))  # Korean Standard Time UTC+9
 IS_VERCEL = os.getenv("VERCEL", "") != ""  # True when running on Vercel (serverless)
 
 # ── In-memory state ──────────────────────────────────────────────────────────
 # Each snapshot: { "timestamp": ISO, "candidates": [...], "total": int }
 vote_history = deque(maxlen=17280)  # ~24h of 5s snapshots
+
+# Previous day winner (KST timezone)
+_prev_day_data = {
+    "date": None,       # "YYYY-MM-DD" in KST
+    "winner": None,     # name of the leading candidate
+    "winner_votes": 0,
+    "runnerup": None,
+    "runnerup_votes": 0,
+    "diff": 0,
+    "loaded": False,
+}
+_prev_day_kst_date = None  # Current KST date for day-change detection
+_prev_day_loaded = False   # Whether we've tried loading from Google Sheet
 current_data = {
     "poll_title": "",
     "poll_body": "",
@@ -632,12 +646,128 @@ def write_google_sheet():
         print(f"[{now()}] Google Sheet queue error: {e}")
 
 
+# ── Previous Day Winner Tracking (KST) ────────────────────────────────────────
+
+def _check_day_change():
+    """Detect KST midnight crossing and save yesterday's final snapshot."""
+    global _prev_day_kst_date, _prev_day_data
+
+    now_kst = datetime.now(KST_TZ)
+    today_kst = now_kst.strftime("%Y-%m-%d")
+
+    if _prev_day_kst_date is None:
+        _prev_day_kst_date = today_kst
+        return
+
+    if today_kst != _prev_day_kst_date:
+        # Day changed! Save the current vote counts as yesterday's final result
+        with lock:
+            candidates = current_data.get("candidates", [])
+
+        if candidates:
+            sorted_c = sorted(candidates, key=lambda c: c["votes"], reverse=True)
+            winner = sorted_c[0]
+            runnerup = sorted_c[1] if len(sorted_c) > 1 else {"name": "N/A", "votes": 0}
+            _prev_day_data = {
+                "date": _prev_day_kst_date,
+                "winner": winner["name"],
+                "winner_votes": winner["votes"],
+                "runnerup": runnerup["name"],
+                "runnerup_votes": runnerup["votes"],
+                "diff": winner["votes"] - runnerup["votes"],
+                "loaded": True,
+            }
+            print(f"[{now()}] 📅 Day changed → {today_kst} KST. Yesterday's winner: {winner['name']} (by {winner['votes'] - runnerup['votes']:,})")
+
+        _prev_day_kst_date = today_kst
+
+
+def _load_prev_day_from_gsheet():
+    """Load previous day's final data from Google Sheet on startup/cold-start."""
+    global _prev_day_data, _prev_day_loaded, _prev_day_kst_date
+
+    if _prev_day_loaded:
+        return
+    _prev_day_loaded = True
+
+    try:
+        if not _gsheet_initialized:
+            if not _init_gsheet():
+                return
+
+        now_kst = datetime.now(KST_TZ)
+        today_kst = now_kst.strftime("%Y-%m-%d")
+        _prev_day_kst_date = today_kst
+        yesterday_kst = (now_kst - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        # Read all timestamps from column A
+        all_ts = _gsheet.col_values(1)
+        total = len(all_ts)
+        if total <= 1:
+            print(f"[{now()}] ⚠ Google Sheet too small to find yesterday's data")
+            return
+
+        # Search backwards for the last entry from yesterday (KST)
+        # Timestamps are in VN (UTC+7), KST = VN + 2 hours
+        target_row = None
+        for i in range(total - 1, 0, -1):
+            try:
+                ts_vn = datetime.strptime(all_ts[i], "%Y-%m-%d %H:%M:%S").replace(tzinfo=VN_TZ)
+                ts_kst = ts_vn.astimezone(KST_TZ)
+                row_date = ts_kst.strftime("%Y-%m-%d")
+                if row_date == yesterday_kst:
+                    target_row = i + 1  # 1-indexed for gsheet
+                    break
+                elif row_date < yesterday_kst:
+                    break
+            except (ValueError, IndexError):
+                continue
+
+        if target_row is None:
+            print(f"[{now()}] ⚠ No data found for yesterday ({yesterday_kst} KST)")
+            return
+
+        # Read just that row: [timestamp, doran, doran_diff, guma, guma_diff, gap]
+        row_data = _gsheet.row_values(target_row)
+        if len(row_data) < 4:
+            return
+
+        doran = int(str(row_data[1]).replace(",", ""))
+        guma = int(str(row_data[3]).replace(",", ""))
+
+        if doran >= guma:
+            _prev_day_data = {
+                "date": yesterday_kst,
+                "winner": "T1 Doran",
+                "winner_votes": doran,
+                "runnerup": "HLE Gumayusi",
+                "runnerup_votes": guma,
+                "diff": doran - guma,
+                "loaded": True,
+            }
+        else:
+            _prev_day_data = {
+                "date": yesterday_kst,
+                "winner": "HLE Gumayusi",
+                "winner_votes": guma,
+                "runnerup": "T1 Doran",
+                "runnerup_votes": doran,
+                "diff": guma - doran,
+                "loaded": True,
+            }
+        print(f"[{now()}] 📅 Loaded yesterday's winner from Google Sheet: {_prev_day_data['winner']} (by {_prev_day_data['diff']:,}) [{yesterday_kst} KST]")
+
+    except Exception as e:
+        print(f"[{now()}] Error loading yesterday's data: {e}")
+
+
 # ── Background Worker ────────────────────────────────────────────────────────
 
 def background_fetcher():
     """Periodically fetch poll data."""
     while True:
         try:
+            _check_day_change()
             fetch_poll_data()
         except Exception as e:
             print(f"[{now()}] Background fetcher error: {e}")
@@ -662,6 +792,13 @@ def api_current():
     """Current poll data with vote velocity."""
     # On Vercel (serverless): fetch data on-demand if not fresh
     if IS_VERCEL:
+        # Load yesterday's data from Google Sheet on cold start
+        if not _prev_day_loaded:
+            try:
+                _load_prev_day_from_gsheet()
+            except Exception as e:
+                print(f"[{now()}] Prev day load error: {e}")
+
         with lock:
             last = current_data.get("last_updated")
         need_fetch = True
@@ -673,6 +810,7 @@ def api_current():
                 pass
         if need_fetch:
             try:
+                _check_day_change()
                 fetch_poll_data()
             except Exception as e:
                 print(f"[{now()}] On-demand fetch error: {e}")
@@ -718,6 +856,7 @@ def api_current():
 
         data["fetch_interval"] = FETCH_INTERVAL
         data["history_length"] = len(vote_history)
+        data["previous_day"] = _prev_day_data if _prev_day_data.get("loaded") else None
 
     return jsonify(data)
 
@@ -754,6 +893,12 @@ def start_background_threads():
     print(f"  Fetch Interval: {FETCH_INTERVAL}s")
     print(f"  Account:        {BSTAGE_EMAIL}")
     print("=" * 60)
+
+    # Load yesterday's winner from Google Sheet on startup
+    try:
+        _load_prev_day_from_gsheet()
+    except Exception as e:
+        print(f"  ⚠ Could not load yesterday's data: {e}")
 
     # Start background fetcher
     fetcher = threading.Thread(target=background_fetcher, daemon=True)

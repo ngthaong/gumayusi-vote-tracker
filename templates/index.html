@@ -469,9 +469,9 @@
                 <div class="change neutral">In this poll</div>
             </div>
             <div class="summary-card">
-                <div class="label">Votes / Min</div>
-                <div class="value" id="totalVelocity">--</div>
-                <div class="change neutral" id="velocityLabel">All candidates</div>
+                <div class="label" id="prevDayLabel">📅 Yesterday's Winner</div>
+                <div class="value" id="prevDayWinner" style="font-size:1.1rem;">--</div>
+                <div class="change neutral" id="prevDayDiff">Loading...</div>
             </div>
             <div class="summary-card">
                 <div class="label">🥇 Leading</div>
@@ -588,7 +588,24 @@
             // Summary
             document.getElementById('totalVotes').textContent = fmt(data.total_votes);
             document.getElementById('totalCandidates').textContent = data.candidates ? data.candidates.length : '--';
-            document.getElementById('totalVelocity').textContent = fmtV(data.total_velocity || 0);
+
+            // Previous day winner
+            if (data.previous_day && data.previous_day.loaded) {
+                const pd = data.previous_day;
+                const dateStr = pd.date;  // "YYYY-MM-DD"
+                // Format date nicely
+                const dateParts = dateStr.split('-');
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const dateLabel = `${months[parseInt(dateParts[1])-1]} ${parseInt(dateParts[2])}`;
+                document.getElementById('prevDayLabel').textContent = `📅 Winner · ${dateLabel} (KST)`;
+                document.getElementById('prevDayWinner').textContent = pd.winner;
+                document.getElementById('prevDayDiff').textContent = `Won by +${pd.diff.toLocaleString()} votes`;
+                document.getElementById('prevDayDiff').className = 'change positive';
+            } else {
+                document.getElementById('prevDayWinner').textContent = '--';
+                document.getElementById('prevDayDiff').textContent = 'No data yet';
+                document.getElementById('prevDayDiff').className = 'change neutral';
+            }
 
             const tc = document.getElementById('totalChange');
             const diff = data.total_diff || 0;
