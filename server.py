@@ -598,6 +598,12 @@ def _gsheet_writer_thread():
             body = _gsheet_batch_format(sheet_id, _gsheet_row_counter)
             _gsheet_spreadsheet.batch_update(body)
 
+            # Update G1 for Vercel throttling (shared across local + Vercel)
+            try:
+                _gsheet.update_acell(_LAST_WRITE_CELL, str(int(time.time())))
+            except Exception:
+                pass
+
         except Exception as e:
             err_str = str(e)
             if "429" in err_str or "Quota" in err_str:
@@ -610,23 +616,21 @@ def _gsheet_writer_thread():
                 time.sleep(5)
 
 
+# Cell G1 stores last write Unix timestamp (for Vercel throttling; persistent across cold starts)
+_LAST_WRITE_CELL = "G1"
+
 def _gsheet_should_write():
-    """On Vercel: check last row timestamp in sheet (no persistent _last_write_time). Returns True if we should write."""
+    """On Vercel: check G1 for last write timestamp (persistent). Returns True if we should write."""
     if not IS_VERCEL:
         return True  # Local uses _last_write_time in fetch_poll_data
     try:
         if not _gsheet_initialized and not _init_gsheet():
             return True  # Can't check, allow write
-        last_row = _gsheet.row_count
-        if last_row < 2:
-            return True
-        last_ts_str = (_gsheet.cell(last_row, 1).value or "").strip()
-        if not last_ts_str:
-            return True
-        # Parse "YYYY-MM-DD HH:MM:SS" in Vietnam timezone
-        last_dt = datetime.strptime(last_ts_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=VN_TZ)
-        age_sec = (datetime.now(VN_TZ) - last_dt).total_seconds()
-        return age_sec >= WRITE_INTERVAL
+        val = (_gsheet.acell(_LAST_WRITE_CELL).value or "").strip()
+        if not val:
+            return True  # No previous write
+        last_ts = float(val)
+        return (time.time() - last_ts) >= WRITE_INTERVAL
     except Exception:
         return True  # On error, allow write
 
@@ -684,6 +688,8 @@ def write_google_sheet():
                 sheet_id = _gsheet._properties.get("sheetId", 0)
                 body = _gsheet_batch_format(sheet_id, _gsheet_row_counter)
                 _gsheet_spreadsheet.batch_update(body)
+                # Store last write time in G1 for throttling (persists across cold starts)
+                _gsheet.update_acell("G1", str(int(time.time())))
             except Exception as ex:
                 print(f"[{now()}] Vercel GSheet write error: {ex}")
         else:
