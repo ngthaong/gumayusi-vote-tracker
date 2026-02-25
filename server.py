@@ -29,6 +29,7 @@ BSTAGE_EMAIL = os.getenv("BSTAGE_EMAIL", "ngthaongjenny@gmail.com")
 BSTAGE_PASSWORD = os.getenv("BSTAGE_PASSWORD", "Guma123.")
 FETCH_INTERVAL = int(os.getenv("FETCH_INTERVAL", "5" if os.getenv("VERCEL", "") else "3"))  # 5s on Vercel (includes API latency), 3s locally
 WRITE_INTERVAL = int(os.getenv("WRITE_INTERVAL", "60"))  # Write to Excel/Google Sheet every 60 seconds
+ENABLE_VERCEL_GSHEET_WRITE = os.getenv("ENABLE_VERCEL_GSHEET_WRITE", "true").lower() in ("1", "true", "yes")
 SPACE_ID = "flnk-official"
 VN_TZ = timezone(timedelta(hours=7))  # Vietnam timezone UTC+7
 KST_TZ = timezone(timedelta(hours=9))  # Korean Standard Time UTC+9
@@ -297,7 +298,9 @@ def fetch_poll_data():
 
         # Write results to xlsx and Google Sheet every WRITE_INTERVAL seconds (skip xlsx on Vercel — no filesystem)
         now_ts = time.time()
-        should_write = (now_ts - _last_write_time >= WRITE_INTERVAL) if not IS_VERCEL else _gsheet_should_write()
+        should_write = (now_ts - _last_write_time >= WRITE_INTERVAL) if not IS_VERCEL else (
+            _gsheet_should_write() if ENABLE_VERCEL_GSHEET_WRITE else False
+        )
         if should_write:
             if not IS_VERCEL:
                 write_result_file()
@@ -473,6 +476,7 @@ else:
     GOOGLE_CREDS_FILE = None
 _gsheet = None
 _gsheet_spreadsheet = None
+_gsheet_throttle = None  # Dedicated sheet for last-write timestamp (avoids G1 conflicts)
 _gsheet_initialized = False
 _gsheet_row_counter = 0  # Track rows locally to avoid extra API reads
 _gsheet_queue = deque(maxlen=500)  # Queue for async writes
@@ -480,7 +484,7 @@ _gsheet_lock = threading.Lock()
 
 def _init_gsheet():
     """Initialize Google Sheets connection."""
-    global _gsheet, _gsheet_spreadsheet, _gsheet_initialized, _gsheet_row_counter
+    global _gsheet, _gsheet_spreadsheet, _gsheet_throttle, _gsheet_initialized, _gsheet_row_counter
     if not GOOGLE_CREDS_FILE:
         print(f"[{now()}] ✗ Google creds not found, skipping Google Sheets")
         return False
@@ -493,6 +497,13 @@ def _init_gsheet():
         gc = gspread.authorize(creds)
         _gsheet_spreadsheet = gc.open_by_key(GOOGLE_SHEET_ID)
         _gsheet = _gsheet_spreadsheet.sheet1
+
+        # Get or create "_throttle" sheet for last-write timestamp (Vercel throttling)
+        try:
+            _gsheet_throttle = _gsheet_spreadsheet.worksheet("_throttle")
+        except gspread.WorksheetNotFound:
+            _gsheet_throttle = _gsheet_spreadsheet.add_worksheet(title="_throttle", rows=1, cols=1)
+            _gsheet_throttle.update_acell("A1", "0")
 
         # Write header if sheet is empty
         if _gsheet.row_count == 0 or not _gsheet.cell(1, 1).value:
@@ -598,11 +609,12 @@ def _gsheet_writer_thread():
             body = _gsheet_batch_format(sheet_id, _gsheet_row_counter)
             _gsheet_spreadsheet.batch_update(body)
 
-            # Update G1 for Vercel throttling (shared across local + Vercel)
-            try:
-                _gsheet.update_acell(_LAST_WRITE_CELL, str(int(time.time())))
-            except Exception:
-                pass
+            # Update _throttle sheet for Vercel throttling (shared across local + Vercel)
+            if _gsheet_throttle:
+                try:
+                    _gsheet_throttle.update_acell("A1", str(int(time.time())))
+                except Exception:
+                    pass
 
         except Exception as e:
             err_str = str(e)
@@ -616,19 +628,18 @@ def _gsheet_writer_thread():
                 time.sleep(5)
 
 
-# Cell G1 stores last write Unix timestamp (for Vercel throttling; persistent across cold starts)
-_LAST_WRITE_CELL = "G1"
-
 def _gsheet_should_write():
-    """On Vercel: check G1 for last write timestamp (persistent). Returns True if we should write."""
+    """On Vercel: check _throttle sheet A1 for last write timestamp. Returns True if we should write."""
     if not IS_VERCEL:
         return True  # Local uses _last_write_time in fetch_poll_data
     try:
         if not _gsheet_initialized and not _init_gsheet():
             return True  # Can't check, allow write
-        val = (_gsheet.acell(_LAST_WRITE_CELL).value or "").strip()
-        if not val:
-            return True  # No previous write
+        if not _gsheet_throttle:
+            return True
+        val = (_gsheet_throttle.acell("A1").value or "").strip().replace(",", "")
+        if not val or not val.replace(".", "").isdigit():
+            return True  # No previous write or invalid
         last_ts = float(val)
         return (time.time() - last_ts) >= WRITE_INTERVAL
     except Exception:
@@ -688,8 +699,12 @@ def write_google_sheet():
                 sheet_id = _gsheet._properties.get("sheetId", 0)
                 body = _gsheet_batch_format(sheet_id, _gsheet_row_counter)
                 _gsheet_spreadsheet.batch_update(body)
-                # Store last write time in G1 for throttling (persists across cold starts)
-                _gsheet.update_acell("G1", str(int(time.time())))
+                # Store last write time in _throttle sheet (persists across cold starts)
+                if _gsheet_throttle:
+                    try:
+                        _gsheet_throttle.update_acell("A1", str(int(time.time())))
+                    except Exception:
+                        pass
             except Exception as ex:
                 print(f"[{now()}] Vercel GSheet write error: {ex}")
         else:

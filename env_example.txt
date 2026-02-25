@@ -32,3 +32,6 @@ BSTAGE_COOKIE=
 FETCH_INTERVAL=5      # How often to fetch poll data (website refresh)
 WRITE_INTERVAL=60     # How often to write to Excel/Google Sheet (1 min)
 
+# ── Vercel only ──────────────────────────────────────────────────────
+# ENABLE_VERCEL_GSHEET_WRITE=false  # Set to false to stop Vercel from writing to the sheet (run local for updates)
+
