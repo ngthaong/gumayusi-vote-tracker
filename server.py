@@ -600,6 +600,10 @@ def _gsheet_writer_thread():
                     continue
                 row = _gsheet_queue.popleft()
 
+            # Skip if last row same minute (dedupe)
+            if _gsheet_last_row_same_minute(row[0] if row else ""):
+                continue
+
             # Append the row (1 API call)
             _gsheet.append_row(row, value_input_option="RAW")
             _gsheet_row_counter += 1
@@ -646,6 +650,25 @@ def _gsheet_should_write():
         return True  # On error, allow write
 
 
+def _gsheet_last_row_same_minute(new_ts_str):
+    """Check if last data row has same minute as new_ts_str. Skip write if so (dedupe)."""
+    try:
+        if not _gsheet_initialized or not _gsheet:
+            return False
+        last_row = _gsheet.row_count
+        if last_row < 2:
+            return False
+        last_ts = (_gsheet.cell(last_row, 1).value or "").strip()
+        if not last_ts or not new_ts_str:
+            return False
+        # Compare minute: "2026-02-25 16:29:30" -> "2026-02-25 16:29"
+        def minute_key(s):
+            return s[:16] if len(s) >= 16 else s
+        return minute_key(last_ts) == minute_key(new_ts_str)
+    except Exception:
+        return False
+
+
 def write_google_sheet():
     """Queue a row for async Google Sheet writing (non-blocking)."""
     try:
@@ -687,6 +710,10 @@ def write_google_sheet():
             guma_diff = guma - prev_map.get("Hanwha Life Esports Gumayusi", guma)
 
         row = [timestamp, doran, doran_diff, guma, guma_diff, gap]
+
+        # Skip if last row is same minute (prevents 2–3 rows/min from concurrent requests)
+        if _gsheet_last_row_same_minute(timestamp):
+            return
 
         if IS_VERCEL:
             # On Vercel: write directly (no background thread)
