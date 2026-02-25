@@ -28,6 +28,7 @@ BSTAGE_TOKEN=
 # OR full cookie string from the Cookie header
 BSTAGE_COOKIE=
 
-# ── Fetch interval (in seconds) ─────────────────────────────────────
-FETCH_INTERVAL=60
+# ── Intervals (in seconds) ───────────────────────────────────────────
+FETCH_INTERVAL=5      # How often to fetch poll data (website refresh)
+WRITE_INTERVAL=60     # How often to write to Excel/Google Sheet (1 min)
 

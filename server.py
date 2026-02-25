@@ -28,6 +28,7 @@ POLL_ID = os.getenv("POLL_ID", "698ecd18c1bbe47a262c4f4b")
 BSTAGE_EMAIL = os.getenv("BSTAGE_EMAIL", "ngthaongjenny@gmail.com")
 BSTAGE_PASSWORD = os.getenv("BSTAGE_PASSWORD", "Guma123.")
 FETCH_INTERVAL = int(os.getenv("FETCH_INTERVAL", "5" if os.getenv("VERCEL", "") else "3"))  # 5s on Vercel (includes API latency), 3s locally
+WRITE_INTERVAL = int(os.getenv("WRITE_INTERVAL", "60"))  # Write to Excel/Google Sheet every 60 seconds
 SPACE_ID = "flnk-official"
 VN_TZ = timezone(timedelta(hours=7))  # Vietnam timezone UTC+7
 KST_TZ = timezone(timedelta(hours=9))  # Korean Standard Time UTC+9
@@ -49,6 +50,8 @@ _prev_day_data = {
 }
 _prev_day_kst_date = None  # Current KST date for day-change detection
 _prev_day_loaded = False   # Whether we've tried loading from Google Sheet
+_last_write_time = 0.0     # When we last wrote to Excel/Sheet (for throttling)
+_last_write_snapshot = None  # {"doran": int, "guma": int} at last write, for diff calculation
 current_data = {
     "poll_title": "",
     "poll_body": "",
@@ -250,7 +253,7 @@ def fetch_poll_results():
 
 def fetch_poll_data():
     """Main fetch: get metadata + results and update state."""
-    global current_data
+    global current_data, _last_write_time, _last_write_snapshot
 
     print(f"[{now()}] Fetching poll data...")
 
@@ -292,10 +295,19 @@ def fetch_poll_data():
 
         print(f"[{now()}] ✓ {total:,} total votes across {len(candidates)} candidates")
 
-        # Write results to xlsx and Google Sheet (skip xlsx on Vercel — no filesystem)
-        if not IS_VERCEL:
-            write_result_file()
-        write_google_sheet()
+        # Write results to xlsx and Google Sheet every WRITE_INTERVAL seconds (skip xlsx on Vercel — no filesystem)
+        now_ts = time.time()
+        should_write = (now_ts - _last_write_time >= WRITE_INTERVAL) if not IS_VERCEL else _gsheet_should_write()
+        if should_write:
+            if not IS_VERCEL:
+                write_result_file()
+            write_google_sheet()
+            _last_write_time = now_ts
+            with lock:
+                cands = current_data.get("candidates", [])
+            tracked = {c["name"].strip(): c["votes"] for c in cands if c["name"].strip() in TRACK_NAMES}
+            if len(tracked) >= 2:
+                _last_write_snapshot = {"doran": tracked.get("T1 Doran", 0), "guma": tracked.get("Hanwha Life Esports Gumayusi", 0)}
     else:
         with lock:
             if not current_data.get("error"):
@@ -365,12 +377,20 @@ def write_result_file():
         doran = tracked.get("T1 Doran", 0)
         guma = tracked.get("Hanwha Life Esports Gumayusi", 0)
         gap = doran - guma
-        timestamp = datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        # Use fetch timestamp (not write time) for consistent ordering; fallback to now if missing
+        ts_iso = current_data.get("last_updated")
+        try:
+            timestamp = datetime.fromisoformat(ts_iso).strftime("%Y-%m-%d %H:%M:%S") if ts_iso else datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            timestamp = datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
-        # Calculate per-candidate change
+        # Calculate per-candidate change (since last write for 1-min diff)
         doran_diff = 0
         guma_diff = 0
-        if len(history) >= 2:
+        if _last_write_snapshot:
+            doran_diff = doran - _last_write_snapshot.get("doran", doran)
+            guma_diff = guma - _last_write_snapshot.get("guma", guma)
+        elif len(history) >= 2:
             prev_map = {c["name"].strip(): c["votes"] for c in history[-2]["candidates"]}
             doran_diff = doran - prev_map.get("T1 Doran", doran)
             guma_diff = guma - prev_map.get("Hanwha Life Esports Gumayusi", guma)
@@ -590,6 +610,27 @@ def _gsheet_writer_thread():
                 time.sleep(5)
 
 
+def _gsheet_should_write():
+    """On Vercel: check last row timestamp in sheet (no persistent _last_write_time). Returns True if we should write."""
+    if not IS_VERCEL:
+        return True  # Local uses _last_write_time in fetch_poll_data
+    try:
+        if not _gsheet_initialized and not _init_gsheet():
+            return True  # Can't check, allow write
+        last_row = _gsheet.row_count
+        if last_row < 2:
+            return True
+        last_ts_str = (_gsheet.cell(last_row, 1).value or "").strip()
+        if not last_ts_str:
+            return True
+        # Parse "YYYY-MM-DD HH:MM:SS" in Vietnam timezone
+        last_dt = datetime.strptime(last_ts_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=VN_TZ)
+        age_sec = (datetime.now(VN_TZ) - last_dt).total_seconds()
+        return age_sec >= WRITE_INTERVAL
+    except Exception:
+        return True  # On error, allow write
+
+
 def write_google_sheet():
     """Queue a row for async Google Sheet writing (non-blocking)."""
     try:
@@ -612,12 +653,20 @@ def write_google_sheet():
         doran = tracked.get("T1 Doran", 0)
         guma = tracked.get("Hanwha Life Esports Gumayusi", 0)
         gap = doran - guma
-        timestamp = datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        # Use fetch timestamp (not write time) for consistent ordering; fallback to now if missing
+        ts_iso = current_data.get("last_updated")
+        try:
+            timestamp = datetime.fromisoformat(ts_iso).strftime("%Y-%m-%d %H:%M:%S") if ts_iso else datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            timestamp = datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
-        # Calculate change
+        # Calculate change (since last write for 1-min diff)
         doran_diff = 0
         guma_diff = 0
-        if len(history) >= 2:
+        if _last_write_snapshot:
+            doran_diff = doran - _last_write_snapshot.get("doran", doran)
+            guma_diff = guma - _last_write_snapshot.get("guma", guma)
+        elif len(history) >= 2:
             prev_map = {c["name"].strip(): c["votes"] for c in history[-2]["candidates"]}
             doran_diff = doran - prev_map.get("T1 Doran", doran)
             guma_diff = guma - prev_map.get("Hanwha Life Esports Gumayusi", guma)
